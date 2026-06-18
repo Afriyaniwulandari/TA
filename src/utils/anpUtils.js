@@ -126,10 +126,8 @@ export function buildUnweightedSupermatrix({ criteriaW, subW, altW }) {
     });
   }
   
-  // Set identity diagonal for alternative columns (sinks)
-  for (let i = 20; i < 25; i++) {
-    SM[i][i] = 1;
-  }
+  // Alt×Alt block intentionally left as zero (matches research Excel model)
+  // No identity diagonal — alternatives are NOT absorbing states in this model
 
   return SM;
 }
