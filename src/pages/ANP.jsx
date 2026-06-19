@@ -488,6 +488,45 @@ export default function ANP() {
     const ranking = extractRanking(limit);
     console.log("ranking:", ranking);
 
+    // ── Persist ANP results for Simulasi page consumption ─────────────────
+    // Bobot Global Subkriteria = Bobot Kriteria × Bobot Lokal Subkriteria
+    const criteriaKeys = ['K1','K2','K3','K4','K5'];
+    const subcriteriaLabels = {
+      K1: ['K1.1 Lahan', 'K1.2 Produktivitas', 'K1.3 Teknologi'],
+      K2: ['K2.1 Efisiensi', 'K2.2 Infrastruktur', 'K2.3 Jaringan'],
+      K3: ['K3.1 Harga Petani', 'K3.2 Harga Pasar', 'K3.3 Margin'],
+      K4: ['K4.1 Standar', 'K4.2 Proses', 'K4.3 Kontrol'],
+      K5: ['K5.1 Regulasi', 'K5.2 Insentif', 'K5.3 Kelembagaan'],
+    };
+    const globalSubWeights = {};
+    criteriaKeys.forEach((k, ci) => {
+      const cWeight = criteriaW[ci];
+      const localW  = subW[k] || [];
+      subcriteriaLabels[k].forEach((label, si) => {
+        globalSubWeights[label] = cWeight * (localW[si] ?? 0);
+      });
+    });
+
+    // Sort ranking list (highest first)
+    const sortedRanking = [...ranking.ranking].sort((a, b) => b.value - a.value);
+    const bestAlt = sortedRanking[0];
+
+    const anpResults = {
+      criteriaWeights: criteriaW,
+      subcriteriaWeights: subW,          // local weights per criterion key
+      globalSubWeights,                  // global weights keyed by label
+      ranking: sortedRanking,            // sorted array of { alt, value }
+      bestAlternative: bestAlt,          // { alt: 'A1', value: 39.xx }
+      calculatedAt: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem('anpCalculatedResults', JSON.stringify(anpResults));
+      console.log('anpCalculatedResults saved to localStorage:', anpResults);
+    } catch (e) {
+      console.warn('Failed to save anpCalculatedResults:', e);
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     return { unweighted, weighted, limit, ranking };
   };
   const superData = buildSuper();
