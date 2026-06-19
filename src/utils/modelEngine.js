@@ -186,6 +186,18 @@ export const runDynamicSimulation = (variables, interventions) => {
         if (varId === 'v_lahan' && interventions.intervensiLuasLahan !== undefined) {
           rawFormula = `(${rawFormula}) + ${interventions.intervensiLuasLahan}`;
         }
+        if (varId === 'v_impor' && interventions.intervensiImpor !== undefined) {
+          rawFormula = `(${rawFormula}) + ${interventions.intervensiImpor}`;
+        }
+        if (varId === 'v_permintaan' && interventions.intervensiPermintaan !== undefined) {
+          rawFormula = `(${rawFormula}) + ${interventions.intervensiPermintaan}`;
+        }
+        if (varId === 'v_hargaref' && interventions.intervensiHargaReferensi !== undefined) {
+          rawFormula = `(${rawFormula}) + ${interventions.intervensiHargaReferensi}`;
+        }
+        if (varId === 'v_hargaimpor' && interventions.intervensiHargaImpor !== undefined) {
+          rawFormula = `(${rawFormula}) + ${interventions.intervensiHargaImpor}`;
+        }
       }
 
       const parsed = parseFormula(rawFormula);
@@ -204,6 +216,7 @@ export const runDynamicSimulation = (variables, interventions) => {
     const flowInName = vars.find(v => v.id === "v_produksi")?.name || "Produksi Garam";
     const flowOutName = vars.find(v => v.id === "v_distribusi")?.name || "Distribusi";
     const priceName = vars.find(v => v.id === "v_harga")?.name || "Harga";
+    const incomeName = vars.find(v => v.id === "v_pendapatan")?.name || "Pendapatan Petani";
 
     rows.push({
       tahun: year,
@@ -211,6 +224,7 @@ export const runDynamicSimulation = (variables, interventions) => {
       produksiGaram: context[flowInName] || 0,
       distribusi: context[flowOutName] || 0,
       harga: context[priceName] || 0,
+      pendapatanPetani: context[incomeName] || 0,
     });
 
     debug.push({

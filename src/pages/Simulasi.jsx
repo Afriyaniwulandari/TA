@@ -4,7 +4,7 @@ import Card from '../components/Card';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { Play, RotateCcw, Sliders, TrendingUp, Table as TableIcon, AlertCircle } from 'lucide-react';
+import { Play, RotateCcw, Sliders, TrendingUp, Table as TableIcon, AlertCircle, Package, Truck, DollarSign, Activity } from 'lucide-react';
 import { getModelData, runDynamicSimulation, validateModel, saveModelData, DEFAULT_MODEL_DATA } from '../utils/modelEngine';
 
 // ─────────────────────────────────────────────────────────────
@@ -15,6 +15,10 @@ const DEFAULT_PARAMS = {
   intervensiFaktorMusim: 0.166,
   intervensiCurahHujan: -0.052,
   intervensiLuasLahan: 7.5,
+  intervensiImpor: 0,
+  intervensiPermintaan: 0,
+  intervensiHargaReferensi: 0,
+  intervensiHargaImpor: 0,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -48,7 +52,8 @@ const tooltipFormatter = (value, name) => {
 // ─────────────────────────────────────────────────────────────
 export default function Simulasi() {
   const [params,     setParams]     = useState({ ...DEFAULT_PARAMS });
-  const [simResults, setSimResults] = useState([]);
+  const [baselineResults, setBaselineResults] = useState([]);
+  const [policyResults,   setPolicyResults]   = useState([]);
   const [debugRows,  setDebugRows]  = useState([]);
   const [modelData,  setModelData]  = useState({ variables: [], relationships: [] });
   const [validation, setValidation] = useState({ isValid: true, errors: [] });
@@ -69,13 +74,29 @@ export default function Simulasi() {
     setValidation(valResult);
     
     if (!valResult.isValid) {
-      setSimResults([]);
+      setBaselineResults([]);
+      setPolicyResults([]);
       setDebugRows([]);
       return;
     }
     
-    const { rows, debug } = runDynamicSimulation(currentData.variables, p);
-    setSimResults(rows);
+    // Baseline scenario (no interventions)
+    const baselineInterventions = {
+      intervensiPeranPemerintah: 0,
+      intervensiFaktorMusim: 0,
+      intervensiCurahHujan: 0,
+      intervensiLuasLahan: 0,
+      intervensiImpor: 0,
+      intervensiPermintaan: 0,
+      intervensiHargaReferensi: 0,
+      intervensiHargaImpor: 0,
+    };
+    const { rows: bRows } = runDynamicSimulation(currentData.variables, baselineInterventions);
+    setBaselineResults(bRows);
+    
+    // Policy scenario (user adjustable interventions)
+    const { rows: pRows, debug } = runDynamicSimulation(currentData.variables, p);
+    setPolicyResults(pRows);
     setDebugRows(debug);
   };
 
@@ -85,9 +106,7 @@ export default function Simulasi() {
 
   // Reset to defaults
   const handleReset = () => {
-    const p = { ...DEFAULT_PARAMS };
-    setParams(p);
-    runSimulation(p, modelData);
+    setParams({ ...DEFAULT_PARAMS });
   };
 
   // Undo delete variable
@@ -108,13 +127,6 @@ export default function Simulasi() {
     
     setModelData(newData);
     saveModelData(newData);
-    
-    const valResult = validateModel(newData);
-    setValidation(valResult);
-    
-    if (valResult.isValid) {
-      runSimulation(params, newData);
-    }
   };
 
   // Reset entire model to defaults
@@ -128,30 +140,180 @@ export default function Simulasi() {
     
     setModelData(newData);
     saveModelData(newData);
-    
-    const valResult = validateModel(newData);
-    setValidation(valResult);
-    
-    if (valResult.isValid) {
-      runSimulation(params, newData);
-    }
   };
 
   // Run on mount
   useEffect(() => {
-    const { data, valResult } = loadAndValidateModel();
-    if (valResult.isValid) {
-      runSimulation(params, data);
-    }
+    loadAndValidateModel();
   }, []); // eslint-disable-line
+
+  // Run simulation automatically when params or modelData change
+  useEffect(() => {
+    if (modelData.variables && modelData.variables.length > 0) {
+      runSimulation(params, modelData);
+    }
+  }, [params, modelData]); // eslint-disable-line
 
   // ── Axis formatters ────────────────────────────────────────
   const formatLeftAxis  = (v) => fmtK(v);
   const formatRightAxis = (v) => v === 0 ? 'Rp 0' : `Rp ${fmtK(v)}`;
 
-  // ─────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────
+  // Comparison helper for the final year (2027)
+  const getComparisonData = () => {
+    if (baselineResults.length === 0 || policyResults.length === 0) return [];
+    
+    const bLast = baselineResults[baselineResults.length - 1];
+    const pLast = policyResults[policyResults.length - 1];
+    
+    const variables = [
+      {
+        key: 'produksiGaram',
+        name: 'Produksi Garam',
+        unit: 'ton',
+        bVal: bLast.produksiGaram,
+        pVal: pLast.produksiGaram,
+        icon: <Activity size={20} className="text-emerald-500" />,
+      },
+      {
+        key: 'stokGaram',
+        name: 'Stok Garam',
+        unit: 'ton',
+        bVal: bLast.stokGaram,
+        pVal: pLast.stokGaram,
+        icon: <Package size={20} className="text-blue-500" />,
+      },
+      {
+        key: 'distribusi',
+        name: 'Distribusi',
+        unit: 'ton',
+        bVal: bLast.distribusi,
+        pVal: pLast.distribusi,
+        icon: <Truck size={20} className="text-amber-500" />,
+      },
+      {
+        key: 'harga',
+        name: 'Harga Lokal',
+        unit: 'Rp/kg',
+        bVal: bLast.harga,
+        pVal: pLast.harga,
+        isPrice: true,
+        icon: <DollarSign size={20} className="text-cyan-500" />,
+      },
+    ];
+    
+    return variables.map(v => {
+      const diff = v.pVal - v.bVal;
+      const pct = v.bVal !== 0 ? (diff / v.bVal) * 100 : 0;
+      return {
+        ...v,
+        diff,
+        pct
+      };
+    });
+  };
+
+  const compData = getComparisonData();
+
+  // Helper component to render chart and table side-by-side
+  const renderScenarioSection = (title, subtitle, results, isPolicy) => {
+    return (
+      <div className="space-y-4">
+        <div className="border-b border-brand-grayMedium pb-2">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <TrendingUp className={isPolicy ? "text-brand-navy h-5 w-5" : "text-slate-500 h-5 w-5"} />
+            {title}
+          </h3>
+          <p className="text-xs text-brand-grayDark mt-0.5">{subtitle}</p>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Chart */}
+          <Card
+            title={`Grafik Time Series - ${title}`}
+            subtitle="Sumbu Y Kiri: Stok, Produksi & Distribusi (Ton) · Sumbu Y Kanan: Harga Lokal (Rp/Kg)"
+          >
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={results} margin={{ top: 15, right: 10, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="tahun" fontSize={11} stroke="#64748B" fontWeight="bold" />
+
+                  <YAxis
+                    yAxisId="left"
+                    fontSize={10}
+                    stroke="#64748B"
+                    width={45}
+                    tickFormatter={formatLeftAxis}
+                    label={{ value: 'Ton', angle: -90, position: 'insideLeft', fontSize: 10, offset: -2, fontWeight: 'bold' }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    fontSize={10}
+                    stroke="#0891B2"
+                    width={75}
+                    tickFormatter={formatRightAxis}
+                    label={{ value: 'Rp/Kg', angle: 90, position: 'insideRight', fontSize: 10, offset: 2, fontWeight: 'bold' }}
+                  />
+
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', color: '#fff', fontSize: '11px', border: 'none', padding: '10px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)' }}
+                    formatter={tooltipFormatter}
+                    labelFormatter={(l) => `Tahun ${l}`}
+                  />
+                  <Legend verticalAlign="top" height={36} fontSize={11} iconType="circle" />
+
+                  <Line yAxisId="left"  type="monotone" dataKey="stokGaram"     name="Stok Garam"     stroke="#3B82F6" strokeWidth={3}   dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  <Line yAxisId="left"  type="monotone" dataKey="produksiGaram" name="Produksi Garam" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Line yAxisId="left"  type="monotone" dataKey="distribusi"    name="Distribusi"     stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Line yAxisId="right" type="monotone" dataKey="harga"         name="Harga"          stroke="#0891B2" strokeWidth={2.5} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          {/* Table */}
+          <Card
+            title={`Tabel Proyeksi - ${title}`}
+            subtitle="Stok awal tahun (INTEG) vs Aliran Flow tahunan"
+            headerAction={
+              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md font-semibold text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                <TableIcon size={12} /> Data Terkomputasi
+              </span>
+            }
+          >
+            <div className="overflow-x-auto border border-brand-grayMedium rounded-xl bg-slate-50 p-2">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-brand-grayMedium text-brand-navy font-bold">
+                    <th className="py-2.5 px-3 text-center">Tahun</th>
+                    <th className="py-2.5 px-3 text-right">Stok (Ton)</th>
+                    <th className="py-2.5 px-3 text-right">Produksi (Ton)</th>
+                    <th className="py-2.5 px-3 text-right">Distribusi (Ton)</th>
+                    <th className="py-2.5 px-3 text-right text-cyan-700">Harga (Rp/Kg)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-grayMedium text-slate-600 font-medium font-mono text-[11px]">
+                  {results.map((row) => (
+                    <tr key={row.tahun} className="hover:bg-white transition-colors">
+                      <td className="py-3 px-3 text-center text-slate-900 font-sans font-bold">{row.tahun}</td>
+                      <td className="py-3 px-3 text-right">{fmtNum(row.stokGaram)}</td>
+                      <td className="py-3 px-3 text-right">{fmtNum(row.produksiGaram)}</td>
+                      <td className="py-3 px-3 text-right">{fmtNum(row.distribusi)}</td>
+                      <td className="py-3 px-3 text-right text-cyan-700 font-bold">
+                        {fmtRp(row.harga)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in p-4 md:p-6 print:p-0">
 
@@ -160,10 +322,10 @@ export default function Simulasi() {
         <div>
           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
             <Sliders className="text-brand-navy h-6 w-6" />
-            Dashboard Simulasi Skenario Kebijakan
+            Dashboard Simulasi Dua Skenario Kebijakan
           </h2>
           <p className="text-sm text-brand-grayDark mt-1">
-            Eksplorasi variabel kebijakan rantai pasok garam nasional — proyeksi 2024–2027 (System Dynamics / INTEG).
+            Perbandingan skenario baseline (tanpa kebijakan) dengan skenario intervensi hasil integrasi ANP secara bersamaan.
             <br/>
             *Formulasi dasar model dapat diatur melalui halaman Model.
           </p>
@@ -196,18 +358,22 @@ export default function Simulasi() {
           <div className="bg-white border border-brand-grayMedium rounded-2xl p-5 md:p-6 shadow-sm">
             <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider border-b border-brand-grayMedium pb-3 flex items-center gap-2 mb-4">
               <TrendingUp size={16} className="text-brand-navy" />
-              Skenario Kebijakan Tahun 2026
+              Parameter Kebijakan (ANP)
             </h3>
 
-            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1 sidebar-scroll">
+            <div className="space-y-4 max-h-[550px] overflow-y-auto pr-1 sidebar-scroll">
               <p className="text-[11px] text-slate-500 mb-3">
-                Masukkan nilai intervensi tambahan yang akan diaplikasikan mulai tahun 2026. Nilai ini akan ditambahkan pada formulasi matematis dasar yang ada di halaman Model.
+                Masukkan nilai intervensi tambahan yang diaplikasikan mulai tahun 2026 berdasarkan prioritas ANP. Perubahan akan langsung meng-update skenario kebijakan secara otomatis.
               </p>
               {[
                 { key: 'intervensiPeranPemerintah', label: 'Intervensi Peran Pemerintah', step: 0.001 },
                 { key: 'intervensiFaktorMusim',     label: 'Intervensi Faktor Musim',     step: 0.001 },
                 { key: 'intervensiCurahHujan',      label: 'Intervensi Curah Hujan',      step: 0.001 },
                 { key: 'intervensiLuasLahan',       label: 'Intervensi Luas Lahan',       step: 0.1   },
+                { key: 'intervensiImpor',           label: 'Intervensi Impor',           step: 0.01  },
+                { key: 'intervensiPermintaan',      label: 'Intervensi Permintaan',      step: 100   },
+                { key: 'intervensiHargaReferensi',  label: 'Intervensi Harga Referensi',  step: 1     },
+                { key: 'intervensiHargaImpor',      label: 'Intervensi Harga Impor',      step: 1     },
               ].map(({ key, label, step }) => (
                 <div key={key} className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-700 block">{label}</label>
@@ -226,17 +392,10 @@ export default function Simulasi() {
             <div className="grid grid-cols-2 gap-3 pt-5 mt-5 border-t border-brand-grayMedium">
               <button
                 onClick={handleReset}
-                className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-colors border border-slate-200 focus:outline-none"
+                className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-colors border border-slate-200 focus:outline-none w-full col-span-2"
               >
                 <RotateCcw size={13} />
-                <span>Reset</span>
-              </button>
-              <button
-                onClick={() => runSimulation()}
-                className="py-2.5 bg-brand-navy hover:bg-brand-navy/90 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-all shadow-md shadow-brand-navy/15 focus:outline-none"
-              >
-                <Play size={13} fill="white" />
-                <span>Simulasikan</span>
+                <span>Reset Parameter Default</span>
               </button>
             </div>
           </div>
@@ -244,91 +403,83 @@ export default function Simulasi() {
         </div>
 
         {/* ── CHARTS + TABLES ──────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-6 md:space-y-8">
+        <div className="lg:col-span-2 space-y-8">
           {validation.isValid ? (
             <>
-              {/* Time-Series Chart */}
-              <Card
-                title="Grafik Hasil Proyeksi Rantai Pasok Garam (2024–2027)"
-                subtitle="Sumbu Y Kiri: Stok, Proyeksi & Distribusi (Ton) · Sumbu Y Kanan: Harga Lokal (Rp/Kg)"
-              >
-                <div className="h-64 md:h-80 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={simResults} margin={{ top: 15, right: 20, left: 10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                      <XAxis dataKey="tahun" fontSize={11} stroke="#64748B" fontWeight="bold" />
+              {/* SECTION 1: Simulasi Tanpa Kebijakan */}
+              {renderScenarioSection(
+                "Simulasi Tanpa Kebijakan (Baseline)",
+                "Proyeksi rantai pasok garam nasional menggunakan parameter dasar model tanpa intervensi ANP.",
+                baselineResults,
+                false
+              )}
 
-                      <YAxis
-                        yAxisId="left"
-                        fontSize={10}
-                        stroke="#64748B"
-                        width={50}
-                        tickFormatter={formatLeftAxis}
-                        label={{ value: 'Ton', angle: -90, position: 'insideLeft', fontSize: 10, offset: -2, fontWeight: 'bold' }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        fontSize={10}
-                        stroke="#0891B2"
-                        width={90}
-                        tickFormatter={formatRightAxis}
-                        label={{ value: 'Rp/Kg', angle: 90, position: 'insideRight', fontSize: 10, offset: 2, fontWeight: 'bold' }}
-                      />
+              {/* SECTION 2: Simulasi Dengan Kebijakan */}
+              {renderScenarioSection(
+                "Simulasi Dengan Kebijakan (Kebijakan ANP)",
+                "Proyeksi dengan intervensi kebijakan yang diintegrasikan berdasarkan parameter input hasil ANP.",
+                policyResults,
+                true
+              )}
 
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', color: '#fff', fontSize: '11px', border: 'none', padding: '10px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)' }}
-                        formatter={tooltipFormatter}
-                        labelFormatter={(l) => `Tahun ${l}`}
-                      />
-                      <Legend verticalAlign="top" height={36} fontSize={11} iconType="circle" />
-
-                      <Line yAxisId="left"  type="monotone" dataKey="stokGaram"     name="Stok Garam"     stroke="#3B82F6" strokeWidth={3}   dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                      <Line yAxisId="left"  type="monotone" dataKey="produksiGaram" name="Produksi Garam" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3 }} />
-                      <Line yAxisId="left"  type="monotone" dataKey="distribusi"    name="Distribusi"     stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} />
-                      <Line yAxisId="right" type="monotone" dataKey="harga"         name="Harga"          stroke="#0891B2" strokeWidth={2.5} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+              {/* RINGKASAN PERBANDINGAN */}
+              <div className="pt-6 border-t border-brand-grayMedium space-y-4">
+                <div className="border-b border-brand-grayMedium pb-2">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <Sliders className="text-emerald-600 h-5 w-5" />
+                    Ringkasan Perbandingan Dampak Kebijakan (Tahun Akhir 2027)
+                  </h3>
+                  <p className="text-xs text-brand-grayDark mt-0.5">
+                    Perbandingan selisih nilai indikator utama pada tahun proyeksi terakhir (2027).
+                  </p>
                 </div>
-              </Card>
 
-              {/* Numerical Results Table */}
-              <Card
-                title="Tabel Hasil Proyeksi Simulasi"
-                subtitle="Nilai komputasi penuh — stok ditampilkan sebagai nilai awal tahun (INTEG)"
-                headerAction={
-                  <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md font-semibold text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                    <TableIcon size={12} /> Data Terkomputasi
-                  </span>
-                }
-              >
-                <div className="overflow-x-auto border border-brand-grayMedium rounded-xl bg-slate-50 p-2">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-brand-grayMedium text-brand-navy font-bold">
-                        <th className="py-2.5 px-4 text-center">Tahun</th>
-                        <th className="py-2.5 px-4 text-right">Stok Garam (Ton)</th>
-                        <th className="py-2.5 px-4 text-right">Produksi Garam (Ton)</th>
-                        <th className="py-2.5 px-4 text-right">Distribusi (Ton)</th>
-                        <th className="py-2.5 px-4 text-right text-cyan-700">Harga (Rp/Kg)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-brand-grayMedium text-slate-600 font-medium font-mono text-[11px]">
-                      {simResults.map((row) => (
-                        <tr key={row.tahun} className="hover:bg-white transition-colors">
-                          <td className="py-3 px-4 text-center text-slate-900 font-sans font-bold">{row.tahun}</td>
-                          <td className="py-3 px-4 text-right">{fmtNum(row.stokGaram)}</td>
-                          <td className="py-3 px-4 text-right">{fmtNum(row.produksiGaram)}</td>
-                          <td className="py-3 px-4 text-right">{fmtNum(row.distribusi)}</td>
-                          <td className="py-3 px-4 text-right text-cyan-700 font-bold">
-                            {fmtRp(row.harga)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {compData.map((item) => {
+                    const isPositive = item.pct >= 0;
+                    const isPrice = item.isPrice;
+                    
+                    const colorClass = isPositive 
+                      ? 'text-emerald-600 bg-emerald-50 border-emerald-200' 
+                      : 'text-rose-600 bg-rose-50 border-rose-200';
+                    const pctSign = isPositive ? '▲' : '▼';
+                    
+                    return (
+                      <div key={item.key} className="bg-white border border-brand-grayMedium rounded-2xl p-5 shadow-sm space-y-3 flex flex-col justify-between hover:border-brand-navy/25 transition-all">
+                        <div className="flex items-center gap-2">
+                          {item.icon}
+                          <div>
+                            <h4 className="font-extrabold text-slate-800 text-xs">{item.name}</h4>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-[11px] font-medium text-slate-600 pt-1">
+                          <div className="border-r border-slate-100 pr-2">
+                            <span className="text-[9px] text-slate-400 block font-sans font-bold uppercase tracking-wide">Baseline:</span>
+                            <span className="font-mono font-bold text-slate-700">
+                              {isPrice ? `${fmtRp(item.bVal)}/kg` : `${fmtNum(item.bVal)} ${item.unit}`}
+                            </span>
+                          </div>
+                          <div className="pl-2">
+                            <span className="text-[9px] text-slate-400 block font-sans font-bold uppercase tracking-wide">Kebijakan:</span>
+                            <span className="font-mono font-bold text-brand-navy">
+                              {isPrice ? `${fmtRp(item.pVal)}/kg` : `${fmtNum(item.pVal)} ${item.unit}`}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-2 border-t border-brand-grayLight pt-2.5 flex items-center justify-between">
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Perubahan</span>
+                          <span className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono font-extrabold flex items-center gap-1 ${colorClass}`}>
+                            <span>{pctSign}</span>
+                            <span>{Math.abs(item.pct).toFixed(2)} %</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </Card>
+              </div>
             </>
           ) : (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6 shadow-sm space-y-6 animate-fade-in">
@@ -398,7 +549,6 @@ export default function Simulasi() {
           )}
         </div>
       </div>
-
 
     </div>
   );

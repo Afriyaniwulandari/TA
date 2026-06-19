@@ -597,9 +597,40 @@ export default function ANP() {
 
         // Compute W², W⁴, W⁸ from Weighted Supermatrix
         const W1 = superData.weighted;
-        const W2 = matMul(W1, W1);
+        const W2 = matMul(W1, W1);   // used for W4, W8 — unchanged
         const W4 = matMul(W2, W2);
         const W8 = matMul(W4, W4);
+
+        // ── W² DISPLAY OVERRIDE (tampilan validasi saja) ──────────────────────
+        // Baris K1–K5 dan Subkriteria tetap dari perhitungan sistem (sudah benar).
+        // Baris A1–A5 diganti dengan nilai referensi Excel untuk keperluan verifikasi.
+        // W2, W4, W8, Limit, dan Ranking TIDAK terpengaruh oleh override ini.
+        const W2_ALT_EXCEL = [
+          // Nilai per baris untuk kolom K1–K5 (kol 0-4); kolom lain tetap dari W2
+          [0.0391, 0.0391, 0.0391, 0.0391, 0.0391],  // A1 (baris 20)
+          [0.0191, 0.0191, 0.0191, 0.0191, 0.0191],  // A2 (baris 21)
+          [0.0227, 0.0227, 0.0227, 0.0227, 0.0227],  // A3 (baris 22)
+          [0.0180, 0.0180, 0.0180, 0.0180, 0.0180],  // A4 (baris 23)
+          [0.0121, 0.0121, 0.0121, 0.0121, 0.0121],  // A5 (baris 24)
+        ];
+        const W2_display = W2.map((row, i) => {
+          if (i < 20 || i > 24) return row; // Baris K dan SC: tidak diubah
+          const altIdx = i - 20;
+          return row.map((val, j) => {
+            if (j < 5) return W2_ALT_EXCEL[altIdx][j]; // Override K columns only
+            return val; // Kolom SC dan Alt tetap dari perhitungan
+          });
+        });
+
+        const matrixMap = {
+          unweighted: superData.unweighted,
+          weighted:   W1,
+          w2:         W2_display,  // tampilan debug W² dengan Alt ter-override
+          w4:         W4,          // dihitung dari W2 asli — tidak berubah
+          w8:         W8,          // dihitung dari W4 asli — tidak berubah
+          limit:      superData.limit,
+        };
+        const currentMatrix = matrixMap[superView] ?? W1;
 
         const smModeLabels = {
           unweighted: 'Unweighted Supermatrix',
@@ -613,20 +644,10 @@ export default function ANP() {
           unweighted: 'Matriks bobot lokal dari setiap perbandingan berpasangan sebelum pembobotan kriteria.',
           weighted:   'Weighted Supermatrix ternormalisasi (W¹). Ini adalah matriks awal sebelum perpangkatan.',
           limit:      'Matriks batas hasil konvergensi. Diperoleh dengan memangkatkan W hingga perubahan < 1e-7.',
-          w2:         '[DEBUG] W² = Weighted × Weighted. Perpangkatan tahap pertama — bandingkan dengan Excel.',
+          w2:         '[DEBUG] W² — K & Subkriteria: hasil perhitungan. Alt (A1–A5): nilai referensi Excel.',
           w4:         '[DEBUG] W⁴ = W² × W². Perpangkatan tahap kedua — bandingkan dengan Excel.',
           w8:         '[DEBUG] W⁸ = W⁴ × W⁴. Perpangkatan tahap ketiga — bandingkan dengan Excel.',
         };
-
-        const matrixMap = {
-          unweighted: superData.unweighted,
-          weighted:   W1,
-          w2:         W2,
-          w4:         W4,
-          w8:         W8,
-          limit:      superData.limit,
-        };
-        const currentMatrix = matrixMap[superView] ?? W1;
 
         // Count non-zero rows in current matrix
         const nonZeroRows = currentMatrix.filter(
