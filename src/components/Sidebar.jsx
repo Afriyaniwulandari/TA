@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoImg from '../assets/logo.png';
-import { 
-  Home, 
-  Layers, 
-  TrendingUp, 
-  GitBranch, 
-  FileText, 
-  ChevronLeft, 
+import {
+  Home,
+  Layers,
+  TrendingUp,
+  GitBranch,
+  ChevronLeft,
   ChevronRight
 } from 'lucide-react';
 
@@ -15,11 +14,10 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const menuItems = [
-    { name: 'Beranda', path: '/', icon: Home },
-    { name: 'Model', path: '/model', icon: Layers },
+    { name: 'Beranda',  path: '/',         icon: Home },
+    { name: 'Model',    path: '/model',    icon: Layers },
+    { name: 'ANP',      path: '/anp',      icon: GitBranch },
     { name: 'Simulasi', path: '/simulasi', icon: TrendingUp },
-    { name: 'ANP', path: '/anp', icon: GitBranch },
-    { name: 'Hasil', path: '/hasil', icon: FileText }
   ];
 
   return (

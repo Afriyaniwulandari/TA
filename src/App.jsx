@@ -7,7 +7,6 @@ import Beranda from './pages/Beranda';
 import Model from './pages/Model';
 import Simulasi from './pages/Simulasi';
 import ANP from './pages/ANP';
-import Hasil from './pages/Hasil';
 
 export default function App() {
   return (
@@ -29,9 +28,8 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Beranda />} />
                 <Route path="/model" element={<Model />} />
-                <Route path="/simulasi" element={<Simulasi />} />
                 <Route path="/anp" element={<ANP />} />
-                <Route path="/hasil" element={<Hasil />} />
+                <Route path="/simulasi" element={<Simulasi />} />
               </Routes>
             </div>
           </main>
